@@ -1,0 +1,79 @@
+NAME
+
+    sixservo.ino - control 6 servo motors via serial console
+
+SYNOPSIS
+
+    after flashing into Arduino, connect via serial console 9600 to send
+    commands:
+
+        supported commands:
+            sd [X] [int]             - turn servo to 0-180
+            ss [X] [int]             - set puls width 500-2500
+            sr [X] [int]             - set position relative to zero -1000-1000
+            sweep [X] [int] [int]    - sweep servo [X] 0-180-0, optional step delay and count
+            d [X]                    - detach / stop controlling the servo
+            p [X]                    - print position
+            z [X]                    - set current as zero position
+            c [X]                    - calibrate
+            m [X] [int] [int]        - monitor servos
+            dump [X]                 - show servo debug values
+            ?                        - print this help
+        [X] is servo index 1-6 or bitwise 0100-0177 (6 last bits as mask), default is zero -> 0177
+        ss 1 1500
+        ok 1
+        sd 0143 45
+        ok 1
+        ok 2
+        ok 6
+
+DESCRIPTION
+
+    Serial console accepts commands and sets servo motor accordingly.
+
+COMMANDS
+
+    [X] is servo index 1-6 or bitwise 0100-0177 (6 last bits as mask),
+    default is zero -> 0177
+
+ sd [X] [int] [int]
+
+    Set servo angle. Value range 0 to 180.
+
+ ss [X] [int] [int]
+
+    Set servo angle using PWM peak time length in nano seconds. Value range
+    500 to 2500.
+
+sweep [X] [int] [int]
+
+    Moves servo with index of first parameter from 90 to 180, then back to
+    0 and again to 90 degree.
+
+    Both parameters are optional. First sets the time in milliseconds to
+    wait between each angle change, default 15. The second is the number of
+    repeats, default 1.
+
+dump [X]
+
+    Will dump servo data.
+
+d [X]
+
+    Will detach - stop sending PWM to servo, turning the control off.
+
+TODO
+
+    In the future, if time and motivation persists, the code may evolve
+    into full multi-servo test/control module.
+
+SEE ALSO
+
+    KiCAD PCBs are here:
+    https://github.com/jozef/sixservo/tree/master/KiCAD, first single servo
+    version: https://blog.kutej.net/2020/04/servo-tester
+
+LICENSE
+
+    This is free software, licensed under the MIT License.
+

@@ -1162,7 +1162,7 @@ U 1 1 5EFD2C8D
 P 10750 5600
 F 0 "J97" H 10778 5576 50  0000 L CNN
 F 1 "Power" H 10778 5485 50  0000 L CNN
-F 2 "Connector_PinSocket_2.54mm:PinSocket_1x02_P2.54mm_Vertical_no_lines" H 10750 5600 50  0001 C CNN
+F 2 "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical_closed" H 10750 5600 50  0001 C CNN
 F 3 "~" H 10750 5600 50  0001 C CNN
 	1    10750 5600
 	1    0    0    1   
@@ -1278,4 +1278,32 @@ Wire Wire Line
 	4000 5000 4650 5000
 Wire Wire Line
 	4000 4800 4650 4800
+$Comp
+L Connector:Conn_01x02_Female J95
+U 1 1 5F0FBD1F
+P 9550 6100
+F 0 "J95" H 9578 6076 50  0000 L CNN
+F 1 "Power" H 9578 5985 50  0000 L CNN
+F 2 "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical_closed" H 9550 6100 50  0001 C CNN
+F 3 "~" H 9550 6100 50  0001 C CNN
+	1    9550 6100
+	1    0    0    1   
+$EndComp
+Text GLabel 9350 6000 0    50   Input ~ 0
+RAW
+$Comp
+L power:GND #PWR0135
+U 1 1 5F10C842
+P 9250 6200
+F 0 "#PWR0135" H 9250 5950 50  0001 C CNN
+F 1 "GND" H 9400 6150 50  0000 C CNN
+F 2 "" H 9250 6200 50  0001 C CNN
+F 3 "" H 9250 6200 50  0001 C CNN
+	1    9250 6200
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	9350 6100 9250 6100
+Wire Wire Line
+	9250 6100 9250 6200
 $EndSCHEMATC

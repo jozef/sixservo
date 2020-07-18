@@ -1,11 +1,30 @@
 // for documentation see end of this file
 
 #include <Arduino.h>
+#include <EEPROM.h>             // https://github.com/arduino/ArduinoCore-avr/blob/2f67c916f6ab6193c404eebe22efe901e0f9542d/libraries/EEPROM/src/EEPROM.h
 #include <TextCMD.h>            // https://github.com/jozef/Arduino-TextCMD
+#include <UpTime.h>             // https://github.com/jozef/Arduino-UpTime
 #include <Servo.h>
 #include "singleservo.h"
 
-singleservo *sixservos[6];
+#define MAX_SERVOS 6
+
+const char MAGIC[] = "6servo 0.01 ";
+
+singleservo *sixservos[MAX_SERVOS];
+
+struct sixservo_config {
+    uint8_t monitor_on;
+    uint16_t monitor_delay;
+    uint8_t future_conf[29];
+};
+uint8_t i2c_register = 0;
+
+sixservo_config config = {
+    0,    // which servos to monitor
+    1000, // monitor delay
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0  // place-holder for future config options
+};
 
 cmd_dispatch commands[] = {
     { "?",     &cmd_help     },
@@ -17,7 +36,9 @@ cmd_dispatch commands[] = {
     { "c",     &cmd_calibrate },
     { "m",     &cmd_monitor },
     { "sweep", &cmd_servo_sweep },
-    { "d",     &cmd_detach }
+    { "d",     &cmd_detach },
+    { "save",  &cmd_save },
+    { "frst",  &cmd_cfg_reset }
 };
 TextCMD cmd((sizeof(commands)/sizeof(commands[0])),commands);
 
@@ -31,7 +52,44 @@ void setup () {
     sixservos[5] = new singleservo(10, A6);
 
     Serial.begin(9600);
-    cmd.do_dispatch("?");
+    while (Serial.available()) { Serial.read(); }
+
+    char magic[strlen(MAGIC)];
+    for (uint8_t i=0; i<strlen(MAGIC); i++) {
+        magic[i] = EEPROM.read(i);
+    }
+
+    if (memcmp(MAGIC,magic,strlen(MAGIC)) == 0) {
+        Serial.print(F("eeprom magic found: "));
+        Serial.println(MAGIC);
+
+        // read config
+        for (uint8_t i = 0; i < sizeof(config); i++) {
+            *((char*)&config+i) = EEPROM.read(strlen(MAGIC)+i);
+        }
+        // read servo configuration
+        for (uint8_t idx = 0; idx < MAX_SERVOS; idx++) {
+            uint8_t base = strlen(MAGIC)+sizeof(config)+sizeof(singleservo_data)*idx;
+            EEPROM.get(base, sixservos[idx]->d);
+        }
+    }
+    else {
+        Serial.println(F("eeprom magic missmatch, doing init"));
+        // after magic, there is MAX_SERVOS of bool has_address and DeviceAddress
+        // write magic
+        for (uint8_t i=0; i<strlen(MAGIC); i++) {
+            EEPROM.write(i,MAGIC[i]);
+        }
+        // write config
+        for (uint8_t i = 0; i < sizeof(config); i++) {
+            EEPROM.write(strlen(MAGIC)+i, *((char*)&config+i));
+        }
+        // write servo configuration
+        for (uint8_t idx = 0; idx < MAX_SERVOS; idx++) {
+            uint8_t base = strlen(MAGIC)+sizeof(config)+sizeof(singleservo_data)*idx;
+            EEPROM.put(base, sixservos[idx]->d);
+        }
+    }
 }
 
 void loop () {
@@ -47,6 +105,7 @@ void loop () {
 }
 
 int8_t cmd_help(uint8_t argc, const char* argv[]) {
+    Serial.println(MAGIC);
     Serial.println(F("supported commands:"));
     Serial.println(F("    sd [X] [int]             - turn servo to 0-180"));
     Serial.println(F("    ss [X] [int]             - set puls width 500-2500"));
@@ -57,6 +116,7 @@ int8_t cmd_help(uint8_t argc, const char* argv[]) {
     Serial.println(F("    c [X]                    - calibrate"));
     Serial.println(F("    m [X] [int] [int]        - monitor servos"));
     Serial.println(F("    dump [X]                 - show servo debug values"));
+    Serial.println(F("    frst                     - factory reset"));
     Serial.println(F("    ?                        - print this help"));
     Serial.println(F("[X] is servo index 1-6 or bitwise 0100-0177 (6 last bits as mask), default is zero -> 0177"));
     return 0;
@@ -110,7 +170,7 @@ int8_t cmd_dump(uint8_t argc, const char* argv[]) {
 int8_t cmd_set_spos(uint8_t argc, const char* argv[]) {
     if (argc != 3) return -1;
     uint8_t idxs = _decode_idxs(argv[1]);
-    int spos = atoi(argv[2]);
+    int spos = strtol(argv[2], NULL, 0);
 
     for (uint8_t idx = 0; idx < 7; idx++) {
         if (!(idxs & (1 << idx))) continue;
@@ -126,7 +186,7 @@ int8_t cmd_set_spos(uint8_t argc, const char* argv[]) {
 int8_t cmd_set_rpos(uint8_t argc, const char* argv[]) {
     if (argc != 3) return -1;
     uint8_t idxs = _decode_idxs(argv[1]);
-    int rpos = atoi(argv[2]);
+    int rpos = strtol(argv[2], NULL, 0);
 
     for (uint8_t idx = 0; idx < 7; idx++) {
         if (!(idxs & (1 << idx))) continue;
@@ -152,7 +212,7 @@ void set_dpos(uint8_t idxs, uint8_t dpos) {
 int8_t cmd_set_dpos(uint8_t argc, const char* argv[]) {
     if (argc != 3) return -1;
     uint8_t idxs = _decode_idxs(argv[1]);
-    int dpos = atoi(argv[2]);
+    int dpos = strtol(argv[2], NULL, 0);
 
     set_dpos(idxs, dpos);
 
@@ -166,6 +226,19 @@ int8_t cmd_detach(uint8_t argc, const char* argv[]) {
     for (uint8_t idx = 0; idx < 7; idx++) {
         if (!(idxs & (1 << idx))) continue;
         sixservos[idx]->detach();
+        _okko( true, idx );
+    }
+
+    return 0;
+}
+
+int8_t cmd_save(uint8_t argc, const char* argv[]) {
+    uint8_t idxs = (argc > 1 ? _decode_idxs(argv[1]) : 0177);
+
+    for (uint8_t idx = 0; idx < 7; idx++) {
+        if (!(idxs & (1 << idx))) continue;
+        uint8_t base = strlen(MAGIC)+sizeof(config)+sizeof(singleservo_data)*idx;
+        EEPROM.put(base, sixservos[idx]->d);
         _okko( true, idx );
     }
 
@@ -196,11 +269,14 @@ int8_t cmd_calibrate(uint8_t argc, const char* argv[]) {
 
 int8_t cmd_monitor(uint8_t argc, const char* argv[]) {
     uint8_t idxs = (argc > 1 ? _decode_idxs(argv[1]) : 0177);
-    uint16_t iterations = (argc > 2 ? atoi(argv[2]) : 1);
-    uint16_t step_delay = (argc > 3 ? atoi(argv[3]) : 1000);
+    uint16_t iterations = (argc > 2 ? strtol(argv[2], NULL, 0) : 1);
+    uint16_t step_delay = (argc > 3 ? strtol(argv[3], NULL, 0) : 1000);
 
-    for (uint16_t iter = 0; iter < iterations; iter++) {
+    for (uint16_t iter = 0; (iterations != 0xffff ? iter < iterations : 1); iter++) {
         if (iter != 0) delay(step_delay);
+
+        Serial.print("t ");
+        Serial.println(uptime());
         for (uint8_t idx = 0; idx < 7; idx++) {
             if (!(idxs & (1 << idx))) continue;
 
@@ -209,6 +285,8 @@ int8_t cmd_monitor(uint8_t argc, const char* argv[]) {
             Serial.print(' ');
             Serial.println(sixservos[idx]->get_rpos());
         }
+
+        if (Serial.available()) break;
     }
 
     return 0;
@@ -220,13 +298,13 @@ int8_t cmd_servo_sweep(uint8_t argc, const char* argv[]) {
     uint8_t idxs = (argc > 1 ? _decode_idxs(argv[1]) : 077);
 
     if (argc >= 3) {
-        loop_count = atoi(argv[2]);
+        loop_count = strtol(argv[2], NULL, 0);
         if (loop_count <= 0) {
             Serial.println(F("loop count has to be positive, non-zero int"));
             return -1;
         }
         if (argc >= 4) {;
-            delay_time = atoi(argv[3]);
+            delay_time = strtol(argv[3], NULL, 0);
             if (delay_time <= 0) {
                 Serial.println(F("delay has to be positive, non-zero int"));
                 return -1;
@@ -256,6 +334,14 @@ int8_t cmd_servo_sweep(uint8_t argc, const char* argv[]) {
         }
     }
 
+    return 0;
+}
+
+int8_t cmd_cfg_reset(uint8_t argc, const char* argv[]) {
+    EEPROM.write(0, 0);
+    Serial.print(F("magic cleared, now doing reset"));
+    void (*do_reset)(void) = 0;
+    do_reset();
     return 0;
 }
 
@@ -337,12 +423,21 @@ Will monitor servos and return C<sr> commands based on the feedback pin
 readings.
 
 Both paramters are optional.
-First parameter is the count of how many readings will be done.
+First parameter is the count of how many readings will be done. Use -1
+or 0xffff to set infinite count. Will finish on any serial input.
 Second parameter is the delay between reading.
 
 =head1 dump [X]
 
 Will dump servo data.
+
+=head1 save [X]
+
+Will save servo data into eeprom for permanent storage.
+
+=head1 rfst [X]
+
+Factory-reset will clear eeprom and start from defaults.
 
 =head1 SEE ALSO
 

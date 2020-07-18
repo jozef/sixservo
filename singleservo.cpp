@@ -120,7 +120,6 @@ void singleservo::dump_data() {
 void singleservo::_init() {
     pinMode(d.feedback_pin, INPUT);
     has_feedback = (get_fpos(8) < NC_TH ? false : true);
-    if (!set_spos(d.spos_zero, 1)) delay(500);
     detach();
 }
 
@@ -192,12 +191,14 @@ bool singleservo::calibrate() {
     }
 
     set_rpos(CALIB_RANGE, true);
-    uint16_t fpos_cw = get_fpos();
+    delay(3*WAIT_CHANGE_MS);
+    uint16_t fpos_cw = get_fpos(20);
     uint16_t spos_cw = _last_spos;
     d.fpos_min = _approx_border(d.spos_zero, spos_cw, d.spos_min, d.fpos_zero, fpos_cw);
 
     set_rpos(0-CALIB_RANGE, true);
-    uint16_t fpos_ccw = get_fpos();
+    delay(3*WAIT_CHANGE_MS);
+    uint16_t fpos_ccw = get_fpos(20);
     uint16_t spos_ccw = _last_spos;
     d.fpos_max = _approx_border(d.spos_zero, spos_ccw, d.spos_max, d.fpos_zero, fpos_ccw);
 

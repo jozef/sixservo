@@ -72,7 +72,9 @@ m [X] [int] [int]
     readings.
 
     Both paramters are optional. First parameter is the count of how many
-    readings will be done. Second parameter is the delay between reading.
+    readings will be done. Use -1 or 0xffff to set infinite count. Will
+    finish on any serial input. Second parameter is the delay between
+    reading.
 
 dump [X]
 

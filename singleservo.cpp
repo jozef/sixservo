@@ -3,10 +3,9 @@
 #include "singleservo.h"
 #include <Servo.h>
 
-#define WAIT_CHANGE_MS 50   // how long to wait for feedback to stabilize
+#define WAIT_CHANGE_MS 100   // how long to wait for feedback to stabilize
 #define MAX_ITER 300
-// #define CALIB_RANGE 0x60
-// #define CALIB_EXTEND 0x04
+#define CALIB_RANGE 0x160
 #define NC_TH 5
 #define DEBUG 0
 
@@ -29,21 +28,37 @@ bool singleservo::set_dpos(uint8_t new_dpos, bool do_wait_stable) {
     );
 }
 
-bool singleservo::set_spos(int16_t new_spos) {
+bool singleservo::set_spos(uint16_t new_spos) {
     return set_spos(new_spos, false);
 }
 
-bool singleservo::set_spos(int16_t new_spos, bool do_wait_stable) {
+bool singleservo::set_spos(uint16_t new_spos, bool do_wait_stable) {
     if (d.is_disabled) return false;
-    if (new_spos < d.spos_min) return false;
-    if (new_spos > d.spos_max) return false;
+    if (new_spos < d.spos_min) {
+        set_spos(d.spos_min, do_wait_stable);
+        return false;
+    }
+    if (new_spos > d.spos_max) {
+        set_spos(d.spos_max, do_wait_stable);
+        return false;
+    }
 
     if (!_servo.attached()) {
         _servo.attach(d.signal_pin, d.spos_min, d.spos_max);
     }
     _servo.writeMicroseconds(new_spos);
+    _last_spos = new_spos;
 
     return (do_wait_stable ? wait_stable() : true);
+}
+
+bool singleservo::set_rpos(int16_t new_rpos) {
+    return set_rpos(new_rpos, false);
+}
+
+bool singleservo::set_rpos(int16_t new_rpos, bool do_wait_stable) {
+    if (d.is_clockwise) new_rpos *= -1;
+    return set_spos(d.spos_zero + new_rpos, do_wait_stable);
 }
 
 bool singleservo::wait_stable() {
@@ -53,9 +68,8 @@ bool singleservo::wait_stable() {
 
     uint16_t max_iterations = MAX_ITER + 1;
     while (--max_iterations) {
-        int16_t _prev_fpos = get_fpos();
+        uint16_t _prev_fpos = get_fpos();
         delay(WAIT_CHANGE_MS);
-
 
         get_fpos();
         if (_prev_fpos == _last_fpos) {
@@ -70,12 +84,12 @@ bool singleservo::wait_stable() {
     return (max_iterations ? true : false);
 }
 
-int16_t singleservo::get_fpos() {
+uint16_t singleservo::get_fpos() {
     return get_fpos(4);
 }
 
-int16_t singleservo::get_fpos(uint8_t scount) {
-    int16_t samples = 0;
+uint16_t singleservo::get_fpos(uint8_t scount) {
+    uint16_t samples = 0;
     for (int8_t i = 0; i < scount; i++) {
         if (i) delay(10);
         samples += analogRead(d.feedback_pin);
@@ -90,7 +104,7 @@ void singleservo::dump_data() {
     Serial.print(F("feedback pin: "));  Serial.println(d.feedback_pin);
     Serial.print(F("has feedback: "));  Serial.println(has_feedback);
     Serial.print(F("is calibrated: ")); Serial.println(d.is_calibrated);
-    Serial.print(F("is reversed: "));   Serial.println(d.is_reversed);
+    Serial.print(F("is clockwise: "));   Serial.println(d.is_clockwise);
     Serial.print(F("is disabled: "));   Serial.println(d.is_disabled);
     Serial.print(F("spos zero: "));     Serial.println(d.spos_zero);
     Serial.print(F("spos min: "));      Serial.println(d.spos_min);
@@ -121,94 +135,86 @@ singleservo::singleservo(singleservo_data init_d) {
     _init();
 }
 
-// bool singleservo::set_zero_pos_current() {
-//     if (!has_feedback) {
-//         set_spos(cur_spos);
-//         return false;
-//     }
-//
-//     int16_t cur_spos = _last_spos || _spos_zero;
-//     int16_t wanted_fpos = get_fpos();
-//
-//     uint16_t max_iterations = MAX_ITER + 1;
-//     while (--max_iterations) {
-//         set_spos(cur_spos);
-//         delay(WAIT_CHANGE_MS);
-//
-//         get_fpos();
-//         if (wanted_fpos == _last_fpos) {
-//             break;
-//         }
-//         else if (wanted_fpos < _last_fpos) {
-//             cur_spos++;
-//         }
-//         else {
-//             cur_spos--;
-//         }
-//     }
-//
-//     return (max_iterations != 0);
-// }
-//
-// bool singleservo::do_calibrate() {
-//     if (!set_zero_pos_current()) {
-//         return false;
-//     }
-//
-//     if (!set_spos(CALIB_RANGE, true)) {
-//         return false;
-//     }
-//     _fpos_max = get_fpos() * CALIB_EXTEND;
-//     if (!set_spos(0-CALIB_RANGE, true)) {
-//         return false;
-//     }
-//     _spos_min = get_fpos() * CALIB_EXTEND;
-//
-//     set_spos(0);
-//     _spos_min = _spos_zero - (CALIB_RANGE * CALIB_EXTEND);
-//     _spos_max = _spos_zero + (CALIB_RANGE * CALIB_EXTEND);
-//     is_calibrated = true;
-//
-//     return true;
-// }
-//
-// bool singleservo::set_spos(int16_t new_pos) {
-//     return set_spos(new_pos, false);
-// }
-//
-// bool singleservo::set_spos(int16_t new_pos, bool wait_stable) {
-//     _last_spos = _spos_zero + new_pos;
-//
-//     // no change if out of range spos
-//     if ((_last_spos < MIN_SPOS) or (_last_spos > MAX_SPOS)) {
-//         _last_spos = _spos_zero - new_pos;
-//         return false;
-//     }
-//
-//     if (!_servo.attached()) {
-//         _servo.attach(_signal_pin);
-//     }
-//     _servo.writeMicroseconds(_last_spos);
-//
-//     uint16_t max_iterations = MAX_ITER;
-//     while (max_iterations--) {
-//         int16_t _prev_fpos = get_fpos();
-//         delay(WAIT_CHANGE_MS);
-//         get_fpos();
-//         if (_prev_fpos == _last_fpos) {
-//             break;
-//         }
-//     }
-//
-//     return (max_iterations ? true : false);
-// }
-//
-// int16_t singleservo::get_pos() {
-//     // last position unknown
-//     if (_last_spos == 0) {
-//         return _spos_zero;
-//     }
-//
-//     return _last_spos - _spos_zero;
-// }
-//
+bool singleservo::set_zero_pos_current() {
+    if (!has_feedback) {
+        if (_last_spos == 0) return false;
+
+        set_spos(_last_spos);
+        return true;
+    }
+
+    uint16_t cur_spos = (_last_spos > 0 ? _last_spos : d.spos_zero);
+    uint16_t wanted_fpos = get_fpos();
+
+    uint16_t max_iterations = MAX_ITER + 1;
+    while (--max_iterations) {
+        set_spos(cur_spos);
+        delay(WAIT_CHANGE_MS);
+
+        get_fpos();
+        if (wanted_fpos == _last_fpos) {
+            break;
+        }
+        else {
+            if (wanted_fpos > _last_fpos) {
+                cur_spos++;
+            }
+            else {
+                cur_spos--;
+            }
+            if (abs(wanted_fpos - _last_fpos) > 10) {
+                cur_spos += ((wanted_fpos - _last_fpos) * 2);
+            }
+        }
+    }
+
+    if (max_iterations != 0) {
+        d.spos_zero = cur_spos;
+        d.fpos_zero = wanted_fpos;
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
+int16_t _approx_border (int16_t l10, int16_t l11, int16_t l12, int16_t l20, int16_t l21) {
+    int32_t ll11 = l11 - l10;
+    int32_t ll12 = l12 - l11;
+    int32_t ll21 = l21 - l20;
+    int32_t ll22 = (ll21 * ll12) / ll11;
+    return (l21 + ll22);
+}
+
+bool singleservo::calibrate() {
+    if (!set_zero_pos_current()) {
+        return false;
+    }
+
+    set_rpos(CALIB_RANGE, true);
+    uint16_t fpos_cw = get_fpos();
+    uint16_t spos_cw = _last_spos;
+    d.fpos_min = _approx_border(d.spos_zero, spos_cw, d.spos_min, d.fpos_zero, fpos_cw);
+
+    set_rpos(0-CALIB_RANGE, true);
+    uint16_t fpos_ccw = get_fpos();
+    uint16_t spos_ccw = _last_spos;
+    d.fpos_max = _approx_border(d.spos_zero, spos_ccw, d.spos_max, d.fpos_zero, fpos_ccw);
+
+    set_rpos(0);
+    d.is_calibrated = true;
+
+    return true;
+}
+
+uint16_t singleservo::get_spos() {
+    if (!has_feedback) return _last_spos;
+
+    return map(get_fpos(), d.fpos_min, d.fpos_max, d.spos_min, d.spos_max);
+}
+
+int16_t singleservo::get_rpos() {
+    if (!d.is_calibrated) return 0;
+
+    return (d.is_clockwise ? 1 : -1) * (d.spos_zero - get_spos());
+}

@@ -11,11 +11,13 @@ cmd_dispatch commands[] = {
     { "?",     &cmd_help     },
     { "dump",  &cmd_dump },
     { "ss",    &cmd_set_spos },
-    { "sd",    &cmd_set_dpos }
-//    { "sr",    &cmd_set_pos },
-//    { "sweep", &cmd_servo_sweep },
-//    { "d",     &cmd_detach },
-//    { "su",    &cmd_su }
+    { "sd",    &cmd_set_dpos },
+    { "sr",    &cmd_set_rpos },
+    { "z",     &cmd_set_zero },
+    { "c",     &cmd_calibrate },
+    { "m",     &cmd_monitor },
+    { "sweep", &cmd_servo_sweep },
+    { "d",     &cmd_detach }
 };
 TextCMD cmd((sizeof(commands)/sizeof(commands[0])),commands);
 
@@ -51,7 +53,6 @@ int8_t cmd_help(uint8_t argc, const char* argv[]) {
     Serial.println(F("    sr [X] [int]             - set position relative to zero -1000-1000"));
     Serial.println(F("    sweep [X] [int] [int]    - sweep servo [X] 0-180-0, optional step delay and count"));
     Serial.println(F("    d [X]                    - detach / stop controlling the servo"));
-    Serial.println(F("    p [X]                    - print position"));
     Serial.println(F("    z [X]                    - set current as zero position"));
     Serial.println(F("    c [X]                    - calibrate"));
     Serial.println(F("    m [X] [int] [int]        - monitor servos"));
@@ -94,7 +95,7 @@ int8_t _decode_idxs(const char* nchars) {
 int8_t cmd_dump(uint8_t argc, const char* argv[]) {
     uint8_t idxs = (argc > 1 ? _decode_idxs(argv[1]) : 0177);
 
-    for (uint8_t idx = 0; idx < 7; idx++){
+    for (uint8_t idx = 0; idx < 7; idx++) {
         if (!(idxs & (1 << idx))) continue;
         Serial.print(F("--- Servo "));
         Serial.print(idx + 1);
@@ -111,15 +112,41 @@ int8_t cmd_set_spos(uint8_t argc, const char* argv[]) {
     uint8_t idxs = _decode_idxs(argv[1]);
     int spos = atoi(argv[2]);
 
-    for (uint8_t idx = 0; idx < 7; idx++){
+    for (uint8_t idx = 0; idx < 7; idx++) {
         if (!(idxs & (1 << idx))) continue;
         _okko(
-            sixservos[idx]->set_spos(spos, sixservos[idx]->has_feedback),
+            sixservos[idx]->set_spos(spos, 0),
             idx
         );
     }
 
     return 0;
+}
+
+int8_t cmd_set_rpos(uint8_t argc, const char* argv[]) {
+    if (argc != 3) return -1;
+    uint8_t idxs = _decode_idxs(argv[1]);
+    int rpos = atoi(argv[2]);
+
+    for (uint8_t idx = 0; idx < 7; idx++) {
+        if (!(idxs & (1 << idx))) continue;
+        _okko(
+            sixservos[idx]->set_rpos(rpos, 0),
+            idx
+        );
+    }
+
+    return 0;
+}
+
+void set_dpos(uint8_t idxs, uint8_t dpos) {
+    for (uint8_t idx = 0; idx < 7; idx++) {
+        if (!(idxs & (1 << idx))) continue;
+        _okko(
+            sixservos[idx]->set_dpos(dpos, 0),
+            idx
+        );
+    }
 }
 
 int8_t cmd_set_dpos(uint8_t argc, const char* argv[]) {
@@ -127,68 +154,111 @@ int8_t cmd_set_dpos(uint8_t argc, const char* argv[]) {
     uint8_t idxs = _decode_idxs(argv[1]);
     int dpos = atoi(argv[2]);
 
-    for (uint8_t idx = 0; idx < 7; idx++){
-        if (!(idxs & (1 << idx))) continue;
-        _okko(
-            sixservos[idx]->set_dpos(dpos, sixservos[idx]->has_feedback),
-            idx
-        );
-    }
+    set_dpos(idxs, dpos);
 
     return 0;
 }
 
 
-//int8_t cmd_detach(uint8_t argc, const char* argv[]) {
-//    Serial.println(F("now detached"));
-//    sixservos[idx]->detach();
-//
-//    return 0;
-//}
-//
-//int8_t cmd_servo_sweep(uint8_t argc, const char* argv[]) {
-//    int delay_time = 15;
-//    int loop_count = 1;
-//    if (argc >= 2) {;
-//        delay_time = String(argv[1]).toInt();
-//        if (delay_time <= 0) {
-//            Serial.println(F("delay has to be positive, non-zero int"));
-//            return -1;
-//        }
-//        if (argc >= 3) {;
-//            loop_count = String(argv[2]).toInt();
-//            if (loop_count <= 0) {
-//                Serial.println(F("loop count has to be positive, non-zero int"));
-//                return -1;
-//            }
-//        }
-//    }
-//
-//    for (uint8_t loop = 0; loop < loop_count; loop++) {
-//        Serial.print(F("Sweep "));
-//        Serial.print(loop+1);
-//        Serial.print(F(" of "));
-//        Serial.println(loop_count);
-//
-//        for (uint8_t pos = 90; pos < 180; pos++) {
-//            set_servo_pos(pos);
-//            delay(delay_time);
-//        }
-//        delay(delay_time);
-//        for (uint8_t pos = 179; pos != 0; pos--) {
-//            set_servo_pos(pos);
-//            delay(delay_time);
-//        }
-//        delay(delay_time);
-//        for (uint8_t pos = 0; pos < 91; pos++) {
-//            set_servo_pos(pos);
-//            delay(delay_time);
-//        }
-//    }
-//
-//    return 0;
-//}
-//
+int8_t cmd_detach(uint8_t argc, const char* argv[]) {
+    uint8_t idxs = (argc > 1 ? _decode_idxs(argv[1]) : 0177);
+
+    for (uint8_t idx = 0; idx < 7; idx++) {
+        if (!(idxs & (1 << idx))) continue;
+        sixservos[idx]->detach();
+        _okko( true, idx );
+    }
+
+    return 0;
+}
+
+int8_t cmd_set_zero(uint8_t argc, const char* argv[]) {
+    uint8_t idxs = (argc > 1 ? _decode_idxs(argv[1]) : 0177);
+
+    for (uint8_t idx = 0; idx < 7; idx++) {
+        if (!(idxs & (1 << idx))) continue;
+        _okko( sixservos[idx]->set_zero_pos_current(), idx );
+    }
+
+    return 0;
+}
+
+int8_t cmd_calibrate(uint8_t argc, const char* argv[]) {
+    uint8_t idxs = (argc > 1 ? _decode_idxs(argv[1]) : 0177);
+
+    for (uint8_t idx = 0; idx < 7; idx++) {
+        if (!(idxs & (1 << idx))) continue;
+        _okko( sixservos[idx]->calibrate(), idx );
+    }
+
+    return 0;
+}
+
+int8_t cmd_monitor(uint8_t argc, const char* argv[]) {
+    uint8_t idxs = (argc > 1 ? _decode_idxs(argv[1]) : 0177);
+    uint16_t iterations = (argc > 2 ? atoi(argv[2]) : 1);
+    uint16_t step_delay = (argc > 3 ? atoi(argv[3]) : 1000);
+
+    for (uint16_t iter = 0; iter < iterations; iter++) {
+        if (iter != 0) delay(step_delay);
+        for (uint8_t idx = 0; idx < 7; idx++) {
+            if (!(idxs & (1 << idx))) continue;
+
+            Serial.print(F("sr "));
+            Serial.print(idx+1);
+            Serial.print(' ');
+            Serial.println(sixservos[idx]->get_rpos());
+        }
+    }
+
+    return 0;
+}
+
+int8_t cmd_servo_sweep(uint8_t argc, const char* argv[]) {
+    int delay_time = 15;
+    int loop_count = 1;
+    uint8_t idxs = (argc > 1 ? _decode_idxs(argv[1]) : 077);
+
+    if (argc >= 3) {
+        loop_count = atoi(argv[2]);
+        if (loop_count <= 0) {
+            Serial.println(F("loop count has to be positive, non-zero int"));
+            return -1;
+        }
+        if (argc >= 4) {;
+            delay_time = atoi(argv[3]);
+            if (delay_time <= 0) {
+                Serial.println(F("delay has to be positive, non-zero int"));
+                return -1;
+            }
+        }
+    }
+
+    for (uint8_t loop = 0; loop < loop_count; loop++) {
+        Serial.print(F("Sweep "));
+        Serial.print(loop+1);
+        Serial.print(F(" of "));
+        Serial.println(loop_count);
+
+        for (uint8_t pos = 90; pos < 180; pos++) {
+            set_dpos(idxs, pos);
+            delay(delay_time);
+        }
+        delay(delay_time);
+        for (uint8_t pos = 179; pos != 0; pos--) {
+            set_dpos(idxs, pos);
+            delay(delay_time);
+        }
+        delay(delay_time);
+        for (uint8_t pos = 0; pos < 91; pos++) {
+            set_dpos(idxs, pos);
+            delay(delay_time);
+        }
+    }
+
+    return 0;
+}
+
 
 /*
 
@@ -204,12 +274,11 @@ after flashing into Arduino, connect via serial console 9600 to send commands:
         sd [X] [int]             - turn servo to 0-180
         ss [X] [int]             - set puls width 500-2500
         sr [X] [int]             - set position relative to zero -1000-1000
-        sweep [X] [int] [int]    - sweep servo [X] 0-180-0, optional step delay and count
+        sweep [X] [int] [int]    - sweep servo [X] 0-180-0, optional count and step delay
         d [X]                    - detach / stop controlling the servo
-        p [X]                    - print position
         z [X]                    - set current as zero position
         c [X]                    - calibrate
-        m [X] [int] [int]        - monitor servos
+        m [X] [int] [int]        - monitor servos, optional count and delay
         dump [X]                 - show servo debug values
         ?                        - print this help
     [X] is servo index 1-6 or bitwise 0100-0177 (6 last bits as mask), default is zero -> 0177
@@ -244,22 +313,36 @@ Value range 500 to 2500.
 Moves servo with index of first parameter from 90 to 180, then back to
 0 and again to 90 degree.
 
-Both parameters are optional. First sets the time in milliseconds to wait
-between each angle change, default 15. The second is the number of
-repeats, default 1.
-
-=head1 dump [X]
-
-Will dump servo data.
+Both parameters are optional.
+First is the number of repeats, default 1.
+Second sets the time in milliseconds to wait between each angle change,
+default 15.
 
 =head1 d [X]
 
 Will detach - stop sending PWM to servo, turning the control off.
 
-=head1 TODO
+=head1 z [X]
 
-In the future, if time and motivation persists, the code may evolve
-into full multi-servo test/control module.
+Will set current servo position as zero.
+
+=head1 c [X]
+
+Will calibrate servo -> calculate feedback be moving servo form current
+position back and forth.
+
+=head1 m [X] [int] [int]
+
+Will monitor servos and return C<sr> commands based on the feedback pin
+readings.
+
+Both paramters are optional.
+First parameter is the count of how many readings will be done.
+Second parameter is the delay between reading.
+
+=head1 dump [X]
+
+Will dump servo data.
 
 =head1 SEE ALSO
 

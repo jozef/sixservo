@@ -139,6 +139,7 @@ bool singleservo::set_zero_pos_current() {
         if (_last_spos == 0) return false;
 
         set_spos(_last_spos);
+        d.spos_zero = _last_spos;
         return true;
     }
 

@@ -51,7 +51,7 @@ void setup () {
     sixservos[4] = new singleservo(9, A7);
     sixservos[5] = new singleservo(10, A6);
 
-    Serial.begin(9600);
+    Serial.begin(19200);
     while (Serial.available()) { Serial.read(); }
 
     char magic[strlen(MAGIC)];
@@ -95,8 +95,16 @@ void setup () {
 void loop () {
     while (Serial.available()) {
         char ch = Serial.read();
-        if (ch == '\b') { Serial.print(F("\b \b")); }
+
+        if ((ch == '\n') || (ch == '\r')) {
+            if (cmd.cur_len()) {
+                Serial.print(F("\r\n"));
+            }
+            ch = '\n';
+        }
+        else if (ch == '\b') { Serial.print(F("\b \b")); }
         else { Serial.print(ch); }
+
         switch (cmd.add_char(ch)) {
             case -1: Serial.println(F("unknown command or syntax error. send '?' for help")); break;
         }
@@ -110,15 +118,16 @@ int8_t cmd_help(uint8_t argc, const char* argv[]) {
     Serial.println(F("    sd [X] [int]             - turn servo to 0-180"));
     Serial.println(F("    ss [X] [int]             - set puls width 500-2500"));
     Serial.println(F("    sr [X] [int]             - set position relative to zero -1000-1000"));
-    Serial.println(F("    sweep [X] [int] [int]    - sweep servo [X] 0-180-0, optional step delay and count"));
+    Serial.println(F("    sweep [X] [int] [int]    - sweep servo [X] 0-180-0, optional count and step delay"));
     Serial.println(F("    d [X]                    - detach / stop controlling the servo"));
     Serial.println(F("    z [X]                    - set current as zero position"));
     Serial.println(F("    c [X]                    - calibrate"));
-    Serial.println(F("    m [X] [int] [int]        - monitor servos"));
+    Serial.println(F("    m [X] [int] [int]        - monitor servos, optional count and delay [s]"));
     Serial.println(F("    dump [X]                 - show servo debug values"));
+    Serial.println(F("    save                     - save config"));
     Serial.println(F("    frst                     - factory reset"));
     Serial.println(F("    ?                        - print this help"));
-    Serial.println(F("[X] is servo index 1-6 or bitwise 0100-0177 (6 last bits as mask), default is zero -> 0177"));
+    Serial.println(F("[X] is servo index 1-6 or bitwise 000-077 (6 last bits as mask), default is zero -> 077"));
     return 0;
 }
 
@@ -142,7 +151,7 @@ int8_t _decode_idxs(const char* nchars) {
     if (idxs == 0) {
         idxs = 077;
     }
-    else if (idxs < 7) {
+    else if ((idxs < 7) && (nchars[0] != '0')) {
         idxs = 1 << (idxs - 1);
     }
     else {
@@ -153,7 +162,7 @@ int8_t _decode_idxs(const char* nchars) {
 }
 
 int8_t cmd_dump(uint8_t argc, const char* argv[]) {
-    uint8_t idxs = (argc > 1 ? _decode_idxs(argv[1]) : 0177);
+    uint8_t idxs = (argc > 1 ? _decode_idxs(argv[1]) : 077);
 
     for (uint8_t idx = 0; idx < 7; idx++) {
         if (!(idxs & (1 << idx))) continue;
@@ -221,7 +230,7 @@ int8_t cmd_set_dpos(uint8_t argc, const char* argv[]) {
 
 
 int8_t cmd_detach(uint8_t argc, const char* argv[]) {
-    uint8_t idxs = (argc > 1 ? _decode_idxs(argv[1]) : 0177);
+    uint8_t idxs = (argc > 1 ? _decode_idxs(argv[1]) : 077);
 
     for (uint8_t idx = 0; idx < 7; idx++) {
         if (!(idxs & (1 << idx))) continue;
@@ -233,7 +242,7 @@ int8_t cmd_detach(uint8_t argc, const char* argv[]) {
 }
 
 int8_t cmd_save(uint8_t argc, const char* argv[]) {
-    uint8_t idxs = (argc > 1 ? _decode_idxs(argv[1]) : 0177);
+    uint8_t idxs = (argc > 1 ? _decode_idxs(argv[1]) : 077);
 
     for (uint8_t idx = 0; idx < 7; idx++) {
         if (!(idxs & (1 << idx))) continue;
@@ -246,7 +255,7 @@ int8_t cmd_save(uint8_t argc, const char* argv[]) {
 }
 
 int8_t cmd_set_zero(uint8_t argc, const char* argv[]) {
-    uint8_t idxs = (argc > 1 ? _decode_idxs(argv[1]) : 0177);
+    uint8_t idxs = (argc > 1 ? _decode_idxs(argv[1]) : 077);
 
     for (uint8_t idx = 0; idx < 7; idx++) {
         if (!(idxs & (1 << idx))) continue;
@@ -257,7 +266,7 @@ int8_t cmd_set_zero(uint8_t argc, const char* argv[]) {
 }
 
 int8_t cmd_calibrate(uint8_t argc, const char* argv[]) {
-    uint8_t idxs = (argc > 1 ? _decode_idxs(argv[1]) : 0177);
+    uint8_t idxs = (argc > 1 ? _decode_idxs(argv[1]) : 077);
 
     for (uint8_t idx = 0; idx < 7; idx++) {
         if (!(idxs & (1 << idx))) continue;
@@ -268,13 +277,13 @@ int8_t cmd_calibrate(uint8_t argc, const char* argv[]) {
 }
 
 int8_t cmd_monitor(uint8_t argc, const char* argv[]) {
-    uint8_t idxs = (argc > 1 ? _decode_idxs(argv[1]) : 0177);
+    uint8_t idxs = (argc > 1 ? _decode_idxs(argv[1]) : 077);
     uint16_t iterations = (argc > 2 ? strtol(argv[2], NULL, 0) : 1);
-    uint16_t step_delay = (argc > 3 ? strtol(argv[3], NULL, 0) : 1000);
+    uint16_t step_delay = (argc > 3 ? strtol(argv[3], NULL, 0) : 3);
+    uptime_interval wait_mon_loop(step_delay);
 
+    Serial.println(F("monitor start"));
     for (uint16_t iter = 0; (iterations != 0xffff ? iter < iterations : 1); iter++) {
-        if (iter != 0) delay(step_delay);
-
         Serial.print("t ");
         Serial.println(uptime());
         for (uint8_t idx = 0; idx < 7; idx++) {
@@ -286,8 +295,12 @@ int8_t cmd_monitor(uint8_t argc, const char* argv[]) {
             Serial.println(sixservos[idx]->get_rpos());
         }
 
+        while (!wait_mon_loop.check()) {
+            if (Serial.available()) break;
+        }
         if (Serial.available()) break;
     }
+    Serial.println(F("monitor stop"));
 
     return 0;
 }
@@ -364,10 +377,11 @@ after flashing into Arduino, connect via serial console 9600 to send commands:
         d [X]                    - detach / stop controlling the servo
         z [X]                    - set current as zero position
         c [X]                    - calibrate
-        m [X] [int] [int]        - monitor servos, optional count and delay
+        m [X] [int] [int]        - monitor servos, optional count and delay [s]
+        save                     - save config
         dump [X]                 - show servo debug values
         ?                        - print this help
-    [X] is servo index 1-6 or bitwise 0100-0177 (6 last bits as mask), default is zero -> 0177
+    [X] is servo index 1-6 or bitwise 000-077 (6 last bits as mask), default is zero -> 077
     ss 1 1500
     ok 1
     sd 0143 45
@@ -377,12 +391,12 @@ after flashing into Arduino, connect via serial console 9600 to send commands:
 
 =head1 DESCRIPTION
 
-Serial console accepts commands and sets servo motor accordingly.
+Serial console (19200) accepts commands and sets servo motor accordingly.
 
 =head1 COMMANDS
 
-[X] is servo index 1-6 or bitwise 0100-0177 (6 last bits as mask),
-default is zero -> 0177
+[X] is servo index 1-6 or bitwise 000-077 (6 last bits as mask),
+default is zero -> 077
 
 =head2 sd [X] [int] [int]
 

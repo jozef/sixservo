@@ -15,10 +15,11 @@ SYNOPSIS
             d [X]                    - detach / stop controlling the servo
             z [X]                    - set current as zero position
             c [X]                    - calibrate
-            m [X] [int] [int]        - monitor servos, optional count and delay
+            m [X] [int] [int]        - monitor servos, optional count and delay [s]
+            save                     - save config
             dump [X]                 - show servo debug values
             ?                        - print this help
-        [X] is servo index 1-6 or bitwise 0100-0177 (6 last bits as mask), default is zero -> 0177
+        [X] is servo index 1-6 or bitwise 000-077 (6 last bits as mask), default is zero -> 077
         ss 1 1500
         ok 1
         sd 0143 45
@@ -28,12 +29,13 @@ SYNOPSIS
 
 DESCRIPTION
 
-    Serial console accepts commands and sets servo motor accordingly.
+    Serial console (19200) accepts commands and sets servo motor
+    accordingly.
 
 COMMANDS
 
-    [X] is servo index 1-6 or bitwise 0100-0177 (6 last bits as mask),
-    default is zero -> 0177
+    [X] is servo index 1-6 or bitwise 000-077 (6 last bits as mask),
+    default is zero -> 077
 
  sd [X] [int] [int]
 
@@ -79,6 +81,14 @@ m [X] [int] [int]
 dump [X]
 
     Will dump servo data.
+
+save [X]
+
+    Will save servo data into eeprom for permanent storage.
+
+rfst [X]
+
+    Factory-reset will clear eeprom and start from defaults.
 
 SEE ALSO
 

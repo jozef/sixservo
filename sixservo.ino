@@ -282,6 +282,8 @@ int8_t cmd_monitor(uint8_t argc, const char* argv[]) {
     uint16_t step_delay = (argc > 3 ? strtol(argv[3], NULL, 0) : 3);
     uptime_interval wait_mon_loop(step_delay);
 
+    while (Serial.available()) { Serial.read(); }
+
     Serial.println(F("monitor start"));
     for (uint16_t iter = 0; (iterations != 0xffff ? iter < iterations : 1); iter++) {
         Serial.print("t ");

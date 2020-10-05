@@ -89,7 +89,7 @@ sub main {
 
     $run_cv->recv;
 
-    exit(0);
+    return 0;
 }
 
 

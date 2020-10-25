@@ -78,7 +78,7 @@ sub main {
                 line => sub {
                     my ($hdl, $line) = @_;
                     say '< m: ' . $line;
-                    if ($line =~ m/^sr (\d) (.+)/) {
+                    if ($line =~ m/^srf? (\d) (-?\d+)\b/) {
                         $mon_servos{$1} = $2;
                         say '> a: ' . $line;
                         $actor_ae->push_write($line . "\n");
@@ -87,7 +87,12 @@ sub main {
             );
         }
     );
-    $monitor_ae->push_write("m 077 -1 1\n");
+    my $posponed_start = AE::timer(
+        3, 0,
+        sub {
+            $monitor_ae->push_write("m 077 -1 1\n");
+        }
+    );
 
     my $term_cb = sub {
         say 'terminating, bye bye';

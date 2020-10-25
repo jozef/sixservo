@@ -34,6 +34,7 @@ class singleservo {
         bool has_feedback;
 
         bool set_rpos(int16_t new_pos);
+        bool set_rfpos(int16_t new_pos, uint16_t in_millis);
         bool set_rpos(int16_t new_pos, bool wait_stable);
         int16_t get_rpos();
         bool set_zero_pos_current();
@@ -50,9 +51,17 @@ class singleservo {
         void detach();
         bool wait_stable();
         void dump_data();
+        void tick();
     private:
         uint16_t _last_spos = 0;
         uint16_t _last_fpos = 0;
+
+        // future/tick positions
+        int16_t _t_slots = 0;
+        uint16_t _next_spos = 0;
+        unsigned long _next_spos_millis = 0;
+        uint16_t _next_spos2 = 0;
+        unsigned long _next_spos2_millis = 0;
         Servo _servo;
 
         void _init();

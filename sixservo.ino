@@ -32,6 +32,7 @@ cmd_dispatch commands[] = {
     { "ss",    &cmd_set_spos },
     { "sd",    &cmd_set_dpos },
     { "sr",    &cmd_set_rpos },
+    { "srf",   &cmd_set_rfpos },
     { "z",     &cmd_set_zero },
     { "c",     &cmd_calibrate },
     { "m",     &cmd_monitor },
@@ -109,7 +110,10 @@ void loop () {
             case -1: Serial.println(F("unknown command or syntax error. send '?' for help")); break;
         }
     }
-    delay(100);
+
+    for (uint8_t idx = 0; idx < MAX_SERVOS; idx++) {
+        sixservos[idx]->tick();
+    }
 }
 
 int8_t cmd_help(uint8_t argc, const char* argv[]) {
@@ -118,6 +122,7 @@ int8_t cmd_help(uint8_t argc, const char* argv[]) {
     Serial.println(F("    sd [X] [int]             - turn servo to 0-180"));
     Serial.println(F("    ss [X] [int]             - set puls width 500-2500"));
     Serial.println(F("    sr [X] [int]             - set position relative to zero -1000-1000"));
+    Serial.println(F("    srf [X] [int] [int]      - set position relative to zero -1000-1000 and time in ms to do so"));
     Serial.println(F("    sweep [X] [int] [int]    - sweep servo [X] 0-180-0, optional count and step delay"));
     Serial.println(F("    d [X]                    - detach / stop controlling the servo"));
     Serial.println(F("    z [X]                    - set current as zero position"));
@@ -208,6 +213,23 @@ int8_t cmd_set_rpos(uint8_t argc, const char* argv[]) {
     return 0;
 }
 
+int8_t cmd_set_rfpos(uint8_t argc, const char* argv[]) {
+    if (argc != 4) return -1;
+    uint8_t idxs = _decode_idxs(argv[1]);
+    int rpos = strtol(argv[2], NULL, 0);
+    uint16_t to_millis = strtol(argv[3], NULL, 0);
+
+    for (uint8_t idx = 0; idx < 7; idx++) {
+        if (!(idxs & (1 << idx))) continue;
+        _okko(
+            sixservos[idx]->set_rfpos(rpos, to_millis),
+            idx
+        );
+    }
+
+    return 0;
+}
+
 void set_dpos(uint8_t idxs, uint8_t dpos) {
     for (uint8_t idx = 0; idx < 7; idx++) {
         if (!(idxs & (1 << idx))) continue;
@@ -291,10 +313,12 @@ int8_t cmd_monitor(uint8_t argc, const char* argv[]) {
         for (uint8_t idx = 0; idx < 7; idx++) {
             if (!(idxs & (1 << idx))) continue;
 
-            Serial.print(F("sr "));
+            Serial.print(F("srf "));
             Serial.print(idx+1);
             Serial.print(' ');
-            Serial.println(sixservos[idx]->get_rpos());
+            Serial.print(sixservos[idx]->get_rpos());
+            Serial.print(' ');
+            Serial.println(step_delay*1000);
         }
 
         while (!wait_mon_loop.check()) {
@@ -360,8 +384,9 @@ int8_t cmd_cfg_reset(uint8_t argc, const char* argv[]) {
     return 0;
 }
 
-
 /*
+
+=encoding utf8
 
 =head1 NAME
 
@@ -369,12 +394,13 @@ sixservo.ino - control 6 servo motors via serial console
 
 =head1 SYNOPSIS
 
-after flashing into Arduino, connect via serial console 9600 to send commands:
+after flashing into Arduino, connect via serial console 19200 to send commands:
 
     supported commands:
         sd [X] [int]             - turn servo to 0-180
         ss [X] [int]             - set puls width 500-2500
         sr [X] [int]             - set position relative to zero -1000-1000
+        srf [X] [int] [int]      - set position relative to zero -1000-1000 and time in ms to do so
         sweep [X] [int] [int]    - sweep servo [X] 0-180-0, optional count and step delay
         d [X]                    - detach / stop controlling the servo
         z [X]                    - set current as zero position
@@ -410,7 +436,17 @@ Value range 0 to 180.
 Set servo angle using PWM peak time length in nano seconds.
 Value range 500 to 2500.
 
-=head1 sweep [X] [int] [int]
+=head2 sr [X] [int] [int]
+
+Set servo angle using PWM peak time length, but ±relative to the zero
+point set using C<z> or C<c> commands.
+
+=head2 srf [X] [int] [int] [int]
+
+Sames as C<sr> but the third argument is time in miliseconds when servo
+angle should be fully reached -> makes for fluent/smooth movements.
+
+=head2 sweep [X] [int] [int]
 
 Moves servo with index of first parameter from 90 to 180, then back to
 0 and again to 90 degree.
@@ -420,20 +456,20 @@ First is the number of repeats, default 1.
 Second sets the time in milliseconds to wait between each angle change,
 default 15.
 
-=head1 d [X]
+=head2 d [X]
 
 Will detach - stop sending PWM to servo, turning the control off.
 
-=head1 z [X]
+=head2 z [X]
 
 Will set current servo position as zero.
 
-=head1 c [X]
+=head2 c [X]
 
 Will calibrate servo -> calculate feedback be moving servo form current
 position back and forth.
 
-=head1 m [X] [int] [int]
+=head2 m [X] [int] [int]
 
 Will monitor servos and return C<sr> commands based on the feedback pin
 readings.
@@ -443,15 +479,15 @@ First parameter is the count of how many readings will be done. Use -1
 or 0xffff to set infinite count. Will finish on any serial input.
 Second parameter is the delay between reading.
 
-=head1 dump [X]
+=head2 dump [X]
 
 Will dump servo data.
 
-=head1 save [X]
+=head2 save [X]
 
 Will save servo data into eeprom for permanent storage.
 
-=head1 rfst [X]
+=head2 rfst [X]
 
 Factory-reset will clear eeprom and start from defaults.
 
@@ -459,6 +495,10 @@ Factory-reset will clear eeprom and start from defaults.
 
 KiCAD PCBs are here: L<https://github.com/jozef/sixservo/tree/master/KiCAD>,
 first single servo version: L<https://blog.kutej.net/2020/04/servo-tester>
+and application L<https://blog.kutej.net/2020/10/bob-303>
+
+F<examples/sixservo-mirror.pl> and F<examples/sixservo-replay.pl>
+scripts to mirror, record and replay servo positions.
 
 =head1 LICENSE
 

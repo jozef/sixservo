@@ -1,7 +1,7 @@
-all: README
+all: README.md
 
 clean:
-	rm -f README README.bak
+	rm -f README.md README.md.bak
 
-README: sixservo.ino
-	pod2readme $< $@ && rm -f $@.bak
+README.md: sixservo.ino
+	pod2readme --format markdown $< $@ && rm -f $@.bak

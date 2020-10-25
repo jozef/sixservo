@@ -8,6 +8,7 @@
 #define CALIB_RANGE 0x160
 #define NC_TH 5
 #define DEBUG 0
+#define TICK_MS 30
 
 void singleservo::detach() {
     if (_servo.attached()) {
@@ -219,4 +220,49 @@ int16_t singleservo::get_rpos() {
     if (!d.is_calibrated) return 0;
 
     return (d.is_clockwise ? 1 : -1) * (d.spos_zero - get_spos());
+}
+
+bool singleservo::set_rfpos(int16_t new_rpos, uint16_t in_millis) {
+    if (_last_spos == 0 ) {
+        _last_spos = get_spos();
+        if (_last_spos == 0 ) {
+            set_rpos(new_rpos);
+        }
+    }
+
+    if (d.is_clockwise) new_rpos *= -1;
+    if (_next_spos) {
+        _next_spos2 = d.spos_zero + new_rpos;
+        _next_spos2_millis = _next_spos_millis + in_millis;
+    }
+    else {
+        _next_spos = d.spos_zero + new_rpos;
+        _next_spos_millis = millis() + in_millis;
+        _t_slots = in_millis / TICK_MS;
+    }
+
+    return true;
+}
+
+void singleservo::tick() {
+    if (!_next_spos_millis) return;
+
+    long diff_t = _next_spos_millis - millis();
+    int16_t slots = diff_t / TICK_MS;
+    if ((diff_t <= 0) || (slots < 1)) {
+        set_spos(_next_spos);
+        _next_spos = _next_spos2;
+        _next_spos_millis = _next_spos2_millis;
+        _t_slots = (_next_spos_millis - millis()) / TICK_MS;
+        _next_spos2 = 0;
+        _next_spos2_millis = 0;
+    }
+    else {
+        if (slots == _t_slots) {
+            return;
+        }
+        int16_t diff_s = (_next_spos - _last_spos);
+        set_spos( _last_spos + (diff_s / slots) );
+        _t_slots = slots;
+    }
 }
